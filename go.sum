@@ -1,0 +1,4 @@
+github.com/mitchellh/mapstructure v1.3.3 h1:SzB1nHZ2Xi+17FP0zVQBHIZqvwRN9408fJO8h+eeNA8=
+github.com/mitchellh/mapstructure v1.3.3/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
+github.com/nixys/nxs-go-redmine/v5 v5.1.1 h1:pdJQ4cZp/rXhEqIdm/baSzPv6UzDHq5S7VL5SI0r3DY=
+github.com/nixys/nxs-go-redmine/v5 v5.1.1/go.mod h1:rl6ABSqq7L9G6U7sP7DcoKG2hf0aQKIMy8WFLuTBTuE=
