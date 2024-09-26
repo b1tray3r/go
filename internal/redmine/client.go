@@ -25,6 +25,7 @@ func (c *Client) GetIssue(id int64) (*rm.IssueObject, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Error getting issue %d: %s", id, err)
 	}
+
 	return &i, nil
 }
 
