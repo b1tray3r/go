@@ -65,6 +65,10 @@ func main() {
 	}
 
 	commit_msg_file := os.Args[2]
+	if _, err := os.Stat(commit_msg_file); err != nil && os.IsNotExist(err) {
+		fmt.Println("commit message file not found!")
+		os.Exit(0)
+	}
 	dat, err := os.ReadFile(commit_msg_file)
 	if err != nil {
 		panic(err)
