@@ -524,18 +524,57 @@ func (srv *Server) handleAddLog(w http.ResponseWriter, r *http.Request) {
 
 	// Create the file with the date as the filename
 	filePath := filepath.Join(dataDir, year, month, date+".json")
-	file, err := os.Create(filePath)
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		http.Error(w, "Failed to create file", http.StatusInternalServerError)
-		slog.Error("Failed to create file", "error", err)
+		http.Error(w, "Failed to create or open file", http.StatusInternalServerError)
+		slog.Error("Failed to create or open file", "error", err)
 		return
 	}
 	defer file.Close()
 
+	// Read the existing entries from the file
+	var existingEntries []TimeEntry
+	decoder := json.NewDecoder(file)
+	if err := decoder.Decode(&existingEntries); err != nil && err != io.EOF {
+		http.Error(w, "Failed to decode entries", http.StatusInternalServerError)
+		slog.Error("Failed to decode entries", "error", err)
+		return
+	}
+
+	// Overwrite existing entries with new entries if the existing entry is not yet synced
+	for _, newEntry := range entries {
+		existingSynced := false
+		for i, existingEntry := range existingEntries {
+			if !existingEntry.Synced {
+				existingEntries[i] = newEntry
+				existingSynced = true
+				break
+			}
+		}
+
+		if !existingSynced {
+			existingEntries = append(existingEntries, newEntry)
+		}
+	}
+
+	// Truncate the file before writing new entries
+	if err := file.Truncate(0); err != nil {
+		http.Error(w, "Failed to truncate file", http.StatusInternalServerError)
+		slog.Error("Failed to truncate file", "error", err)
+		return
+	}
+
+	// Move the file pointer to the beginning of the file
+	if _, err := file.Seek(0, 0); err != nil {
+		http.Error(w, "Failed to seek file", http.StatusInternalServerError)
+		slog.Error("Failed to seek file", "error", err)
+		return
+	}
+
 	// Write the entries to the file as JSON
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(entries); err != nil {
+	if err := encoder.Encode(existingEntries); err != nil {
 		http.Error(w, "Failed to write entries to file", http.StatusInternalServerError)
 		slog.Error("Failed to write entries to file", "error", err)
 		return
