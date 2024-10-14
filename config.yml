@@ -1,9 +1,0 @@
-wls:
-  app:
-    loglevel: 3 # 3: Debug, 2: Warn, 1: Info, 0: Error
-  server:
-    address: ":8085"
-  auth:
-    username: "admin" # Can be defined as an environment variable: MW_AUTH_USERNAME
-    password: "admin" # Can be defined as an environment variable: MW_AUTH_PASSWORD
-

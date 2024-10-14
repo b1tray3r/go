@@ -5,6 +5,7 @@ go 1.23.1
 require (
 	github.com/nao1215/markdown v0.6.0
 	github.com/nixys/nxs-go-redmine/v5 v5.1.1
+	github.com/sanity-io/litter v1.5.5
 	github.com/spf13/viper v1.19.0
 	golang.org/x/crypto v0.28.0
 )

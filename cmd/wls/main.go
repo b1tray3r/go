@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -12,7 +14,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/b1tray3r/go/internal/redmine"
 	"github.com/spf13/viper"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -102,17 +106,12 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		router.HandleFunc("/health", srv.healthCheck)
 
 		// private endpoints with auth
-		router.HandleFunc(
-			"POST /log",
-			// withMiddleware(
-			srv.handleAddLog,
-			//srv.withAuth,
-			//),
-		)
 
-		router.HandleFunc("/list", srv.listEntries)
+		router.HandleFunc("GET /all", srv.listAll)
+		router.HandleFunc("GET /day", srv.listEntriesforDay)
 
-		router.HandleFunc("/sync", srv.syncEntry)
+		router.HandleFunc("POST /sync", srv.syncEntry)
+		router.HandleFunc("POST /log", srv.handleAddLog)
 
 		srv.mux = router
 	})
@@ -148,16 +147,24 @@ type TimeEntry struct {
 	Synced bool
 }
 
-func (srv *Server) listEntries(w http.ResponseWriter, r *http.Request) {
-	slog.Debug("list logs triggered")
+func (srv *Server) listAll(w http.ResponseWriter, r *http.Request) {
 
+}
+
+func (srv *Server) listEntriesforDay(w http.ResponseWriter, r *http.Request) {
+	slog.Debug("list logs triggered")
 	date := r.URL.Query().Get("date")
+	year := date[:4]
+	month := date[5:7]
+	dataDir := "./data"
+	filePath := filepath.Join(dataDir, year, month, date+".json")
 	if date == "" {
-		http.Error(w, "Date query parameter is required", http.StatusBadRequest)
+		http.Error(w, "Date parameter is required", http.StatusBadRequest)
 		return
 	}
 
-	filePath := filepath.Join("./data", date+".json")
+	slog.Debug("Reading entries for date", "date", date)
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -180,9 +187,67 @@ func (srv *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("<!DOCTYPE html><html><head><title>Time Entries</title></head><body>"))
+	w.Write([]byte("<!DOCTYPE html><html><head><title>Time Entries for " + date + "</title></head></html><body>"))
 	defer w.Write([]byte("</body></html>"))
-	w.Write([]byte("<table border='1'><tr><th>Hours</th><th>Tags</th><th>Note</th><th>Sync</th></tr>"))
+	w.Write([]byte(`
+			<style>
+				.calendar {
+					display: grid;
+					grid-template-columns: repeat(7, 1fr);
+					gap: 5px;
+					margin-top: 20px;
+				}
+				.calendar div {
+					padding: 10px;
+					text-align: center;
+					border: 1px solid #ccc;
+					cursor: pointer;
+				}
+				.calendar .header {
+					font-weight: bold;
+					background-color: #f0f0f0;
+				}
+				.calendar .today {
+					background-color: #ffeb3b;
+				}
+				.calendar .weekend {
+					background-color: #f0f0f0;
+				}
+			</style>
+			<div class="calendar">
+				<div class="header">Mon</div>
+				<div class="header">Tue</div>
+				<div class="header">Wed</div>
+				<div class="header">Thu</div>
+				<div class="header">Fri</div>
+				<div class="header">Sat</div>
+				<div class="header">Sun</div>
+	`))
+
+	now := time.Now()
+	firstDayOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	startDay := (int(firstDayOfMonth.Weekday()) + 6) % 7 // Adjust to start with Monday
+
+	for i := 0; i < startDay; i++ {
+		w.Write([]byte(`<div></div>`))
+	}
+
+	daysInMonth := time.Date(now.Year(), now.Month()+1, 0, 0, 0, 0, 0, now.Location()).Day()
+	for day := 1; day <= daysInMonth; day++ {
+		dayDate := time.Date(now.Year(), now.Month(), day, 0, 0, 0, 0, now.Location())
+		classes := ""
+		if dayDate.Weekday() == time.Saturday || dayDate.Weekday() == time.Sunday {
+			classes += " weekend"
+		}
+		if dayDate.Day() == now.Day() {
+			classes += " today"
+		}
+		w.Write([]byte(fmt.Sprintf(`<div class="%s" onclick="window.location.href='?date=%s'">%d</div>`, classes, now.Format("2006-01-")+fmt.Sprintf("%02d", day), day)))
+	}
+
+	w.Write([]byte(`</div>`))
+	w.Write([]byte("<h2>" + date + "</h2>"))
+	w.Write([]byte("<table border='1'><tr><th>Hours</th><th>Tags</th><th>Note</th><th>Sync</th><th>Action</th></tr>"))
 	for i, entry := range entries {
 		tags := make([]string, len(entry.Tags))
 		for j, tag := range entry.Tags {
@@ -193,14 +258,18 @@ func (srv *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 			syncIcon = "&#9989;" // ✅
 		}
 		w.Write([]byte("<tr><td>" + strconv.FormatFloat(entry.Hours, 'f', 2, 64) + "</td><td>" + strings.Join(tags, ", ") + "</td><td>" + entry.Note + "</td>"))
-		w.Write([]byte("<td>" + syncIcon + " <button onclick=\"syncEntry(" + strconv.Itoa(i) + ")\">Sync</button></td></tr>"))
+		w.Write([]byte("<td>" + syncIcon + "</td>"))
+		if !entry.Synced {
+			w.Write([]byte("<td><button onclick=\"syncEntry(" + strconv.Itoa(i) + ")\">Sync</button></td></tr>"))
+		}
 	}
 	w.Write([]byte("</table>"))
 
 	w.Write([]byte(`
 		<script>
 			function syncEntry(index) {
-				fetch('/sync', {
+				const baseUrl = window.location.origin;
+				fetch(baseUrl + '/sync', {
 					method: 'POST',
 					headers: {
 						'Content-Type': 'application/json'
@@ -209,18 +278,28 @@ func (srv *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 				})
 				.then(response => {
 					if (response.ok) {
-						alert('Entry synced successfully');
+						location.reload();
 					} else {
 						alert('Failed to sync entry');
+						alert(response.statusText);
 					}
 				})
 				.catch(error => {
-					console.error('Error syncing entry:', error);
-					alert('Error syncing entry');
+					console.error('Error:', error);
+					alert('Failed to sync entry');
 				});
 			}
 		</script>
 	`))
+}
+
+func findInTags(tags []Tag, name string) string {
+	for _, tag := range tags {
+		if tag.Name == name {
+			return tag.Value
+		}
+	}
+	return ""
 }
 
 func (srv *Server) syncEntry(w http.ResponseWriter, r *http.Request) {
@@ -237,7 +316,11 @@ func (srv *Server) syncEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filePath := filepath.Join("./data", req.Date+".json")
+	year := req.Date[:4]
+	month := req.Date[5:7]
+	dataDir := "./data"
+	filePath := filepath.Join(dataDir, year, month, req.Date+".json")
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -263,8 +346,89 @@ func (srv *Server) syncEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Handle Redmine Sync
+
+	entry := entries[req.Index]
+	if entry.Synced {
+		http.Error(w, "Entry already synced", http.StatusBadRequest)
+		return
+	}
+
+	duration := time.Duration(entry.Hours * float64(time.Hour))
+
+	rc, err := redmine.NewClient(
+		viper.GetString("wls.redmine.url"),
+		viper.GetString("wls.redmine.key"),
+		"",
+		viper.GetBool("wls.redmine.dryrun"),
+	)
+	if err != nil {
+		http.Error(w, "Failed to create Redmine client", http.StatusInternalServerError)
+		slog.Error("Failed to create Redmine client", "error", err)
+		return
+	}
+
+	date, err := time.Parse("2006-01-02", req.Date)
+	if err != nil {
+		log.Printf("failed to parse date string to time %s", req.Date)
+		http.Error(w, "Failed to parse date", http.StatusBadRequest)
+		return
+	}
+
+	issueID := findInTags(entry.Tags, "issue")
+	if issueID == "" {
+		http.Error(w, "No issue ID found in tags", http.StatusBadRequest)
+		slog.Error("No issue ID found in tags")
+		return
+	}
+
+	aID := findInTags(entry.Tags, "action")
+	if aID == "" {
+		http.Error(w, "No activity ID found in tags", http.StatusBadRequest)
+		slog.Error("No activity ID found in tags")
+		return
+	}
+
+	issueID = strings.TrimPrefix(issueID, "#")
+	iid, err := strconv.ParseInt(issueID, 10, 64)
+	if err != nil {
+		http.Error(w, "Failed to parse issue ID", http.StatusBadRequest)
+		slog.Error("Failed to parse issue ID", "issueID", issueID)
+		return
+	}
+	issue, err := rc.GetIssue(iid)
+	if err != nil {
+		http.Error(w, "Failed to get issue", http.StatusInternalServerError)
+		slog.Error("Failed to get issue", "issueID", issueID)
+		return
+	}
+
+	pid := strconv.Itoa(int(issue.Project.ID))
+	activityID, err := rc.GetActivityID(pid, aID)
+	if err != nil {
+		http.Error(w, "Failed to get activity ID", http.StatusInternalServerError)
+		slog.Error("Failed to get activity ID", "activityID", aID)
+		return
+	}
+
+	te := redmine.TimeEntry{
+		IssueIDs:   []string{fmt.Sprintf("%d", issue.ID)},
+		ActivityID: strconv.Itoa(int(activityID)),
+		Start:      date,
+		Duration:   duration.Hours(),
+		IsRedmine:  true,
+		Comment:    entry.Note,
+	}
+
+	if err := rc.Log(te); err != nil {
+		http.Error(w, "Failed to log time entry", http.StatusInternalServerError)
+		slog.Error("Failed to log time entry", "error", err)
+		return
+	}
+
 	entries[req.Index].Synced = true
 
+	// Store the entry
 	file, err = os.Create(filePath)
 	if err != nil {
 		http.Error(w, "Failed to create file", http.StatusInternalServerError)
@@ -288,7 +452,7 @@ func (srv *Server) syncEntry(w http.ResponseWriter, r *http.Request) {
 // handleStockUpdate is responsible to handle the incoming stock updates.
 func (srv *Server) handleAddLog(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("add log triggered")
-	// w.Header().Set("Content-Type", "application/json")
+	//w.Header().Set("Content-Type", "application/json")
 
 	regex := `\s+▶.*`
 	body, err := io.ReadAll(r.Body)
@@ -340,11 +504,6 @@ func (srv *Server) handleAddLog(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	json.NewEncoder(w).Encode(&ServerResponse{
-		Status:  200,
-		Message: "MD accepted!",
-	})
-
 	// Extract the date from the markdown body
 	dateRegex := regexp.MustCompile(`#\s*(\d{4}-\d{2}-\d{2})`)
 	dateMatches := dateRegex.FindStringSubmatch(string(body))
@@ -354,15 +513,17 @@ func (srv *Server) handleAddLog(w http.ResponseWriter, r *http.Request) {
 	date := dateMatches[1]
 
 	// Create the data directory if it doesn't exist
+	year := date[:4]
+	month := date[5:7]
 	dataDir := "./data"
-	if err := os.MkdirAll(dataDir, os.ModePerm); err != nil {
+	if err := os.MkdirAll(filepath.Join(dataDir, year, month), os.ModePerm); err != nil {
 		http.Error(w, "Failed to create data directory", http.StatusInternalServerError)
 		slog.Error("Failed to create data directory", "error", err)
 		return
 	}
 
 	// Create the file with the date as the filename
-	filePath := filepath.Join(dataDir, date+".json")
+	filePath := filepath.Join(dataDir, year, month, date+".json")
 	file, err := os.Create(filePath)
 	if err != nil {
 		http.Error(w, "Failed to create file", http.StatusInternalServerError)
@@ -382,7 +543,10 @@ func (srv *Server) handleAddLog(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("Entries successfully written to file", "file", filePath)
 
-	json.NewEncoder(w).Encode(entries)
+	json.NewEncoder(w).Encode(&ServerResponse{
+		Status:  200,
+		Message: "MD accepted!",
+	})
 }
 
 // setupLoglevel sets the log level based on given verbosity

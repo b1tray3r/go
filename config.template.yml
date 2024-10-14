@@ -1,0 +1,12 @@
+wls:
+  app:
+    loglevel: 3 # 3: Debug, 2: Warn, 1: Info, 0: Error
+  server:
+    address: ":8085"
+  auth:
+#    username: "admin" # WLS_AUTH_USERNAME
+#    password: "admin" # WLS_AUTH_PASSWORD
+  redmine:
+#    dryrun: false  # WLS_REDMINE_DRYRUN
+#    url: ""        # WLS_REDMINE_URL
+#    key: ""        # WLS_REDMINE_KEY

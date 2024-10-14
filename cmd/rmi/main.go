@@ -30,7 +30,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	rmc, err := redmine.NewClient(URL, KEY, "#")
+	rmc, err := redmine.NewClient(URL, KEY, "#", true)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
