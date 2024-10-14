@@ -1,0 +1,48 @@
+meta {
+  name: post add log
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{URL}}/log
+  body: text
+  auth: none
+}
+
+body:text {
+  ---
+  date: 2024-09-20
+  ---
+  # 2024-09-20
+  
+  ## Zeiterfassung #timelog 
+  
+  |     | Dauer | Tags                                                    | Notiz                         |
+  | --- | ----- | ------------------------------------------------------- | ----------------------------- |
+  | ▶   | 2     | #customer/jbl #team/crew #issue/58072 #action/CS1040    | Entwicklung der Middleware    |
+  | ▶   | 3     | #customer/ersa #team/crew #issue/43404 #action/CS1040   | Fix des SAP Importer Scripts  |
+  | ▶   | 1     | #customer/BUSU #team/devops #issue/65091 #action/SU8250 | Teilnahme an versch. Terminen |
+  | ▶   | 1     | #customer/BUCS #team/crew #issue/41850 #action/CS4010   | Teilnahme am Termin           |
+  | ▶   | 1     | #customer/BUCS #team/crew #issue/41850 #action/CS4010   | Emails und Selbstorga         |
+  |     |       |                                                         |                               |
+  |     |       |                                                         |                               |
+  |     |       |                                                         |                               |
+  |     |       |                                                         |                               |
+  |     |       |                                                         |                               |
+  | Sum | 8     |                                                         |                               |
+  |     |       |                                                         |                               |
+  <!-- TBLFM: @>$2=sum(@I..@-1) -->
+  
+  ## Aufgeschlagene Aufgaben
+  
+  ## Meetings
+  
+  ### Meeting 1
+  
+  ## Learnings
+  
+  ### Alacritty installation guide for ubuntu 2204
+  
+  https://linux.how2shout.com/how-to-install-alacritty-terminal-on-ubuntu-22-04-lts/#2_Add_Alacritty_PPA_repository
+}
