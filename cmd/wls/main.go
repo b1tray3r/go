@@ -601,7 +601,7 @@ func setupConfig() {
 		slog.Error("Error reading config file", "error", err)
 	}
 
-	viper.SetDefault("wls.server.address", "8085")
+	viper.SetDefault("wls.server.address", ":8085")
 }
 
 func main() {
