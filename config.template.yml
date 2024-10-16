@@ -10,3 +10,9 @@ wls:
 #    dryrun: false  # WLS_REDMINE_DRYRUN
 #    url: ""        # WLS_REDMINE_URL
 #    key: ""        # WLS_REDMINE_KEY
+
+rmi:
+  redmine:
+#    dryrun: false  # WLS_REDMINE_DRYRUN
+#    url: ""        # WLS_REDMINE_URL
+#    key: ""        # WLS_REDMINE_KEY
