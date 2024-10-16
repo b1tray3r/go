@@ -9,7 +9,6 @@ import (
 	"time"
 
 	redmine "github.com/nixys/nxs-go-redmine/v5"
-	rm "github.com/nixys/nxs-go-redmine/v5"
 	"github.com/sanity-io/litter"
 )
 
@@ -20,7 +19,7 @@ type Client struct {
 
 	Dry bool
 
-	api *rm.Context
+	api *redmine.Context
 }
 
 func (c *Client) getIssueID(issueIDs []string) (int64, error) {
@@ -73,7 +72,6 @@ type TimeEntry struct {
 	Tags       []string
 	Comment    string
 	ActivityID string
-	errors     []string
 	IsRedmine  bool
 	IsJira     bool
 }
@@ -120,16 +118,18 @@ func (c *Client) Log(te TimeEntry) error {
 		return fmt.Errorf("could not log time entry")
 	}
 
-	log.Println("seemed ok with code %d", code)
+	log.Println("seemed ok with code %s", code)
 
 	return nil
 }
 
 func (c *Client) WriteComment(id int64, comment string) error {
-	payload := rm.IssueUpdateObject{
-		Notes: &comment,
+	private := true
+	payload := redmine.IssueUpdateObject{
+		Notes:        &comment,
+		PrivateNotes: &private,
 	}
-	code, err := c.api.IssueUpdate(id, rm.IssueUpdate{
+	code, err := c.api.IssueUpdate(id, redmine.IssueUpdate{
 		Issue: payload,
 	})
 	if code == 403 {
@@ -145,8 +145,8 @@ func (c *Client) WriteComment(id int64, comment string) error {
 	return nil
 }
 
-func (c *Client) GetIssue(id int64) (*rm.IssueObject, error) {
-	i, code, err := c.api.IssueSingleGet(id, rm.IssueSingleGetRequest{})
+func (c *Client) GetIssue(id int64) (*redmine.IssueObject, error) {
+	i, code, err := c.api.IssueSingleGet(id, redmine.IssueSingleGetRequest{})
 	if code == 403 {
 		return nil, fmt.Errorf("access forbidden on %d: %d", id, code)
 	}
@@ -165,8 +165,8 @@ func NewClient(URL, key, prefix string, dry bool) (*Client, error) {
 		return nil, fmt.Errorf("failed to create new client: make sure to provide URL and key.")
 	}
 
-	api := rm.Init(
-		rm.Settings{
+	api := redmine.Init(
+		redmine.Settings{
 			Endpoint: URL,
 			APIKey:   key,
 		},
