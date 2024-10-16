@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"regexp"
@@ -10,19 +11,34 @@ import (
 
 	"github.com/b1tray3r/go/internal/redmine"
 	md "github.com/nao1215/markdown"
+	"github.com/sanity-io/litter"
+	"github.com/spf13/viper"
 )
 
-func main() {
-	URL, ok := os.LookupEnv("RMI_URL")
-	if !ok || URL == "" {
-		fmt.Fprintln(os.Stderr, "RMI_URL is not defined in your environment.")
-		os.Exit(1)
-	}
+func setupConfig() {
+	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+	viper.AddConfigPath(".")
 
-	KEY, ok := os.LookupEnv("RMI_KEY")
-	if !ok || KEY == "" {
-		fmt.Fprintln(os.Stderr, "RMI_KEY is not defined in your environment.")
-		os.Exit(1)
+	// Read in environment variables that match
+	viper.AutomaticEnv()
+	replacer := strings.NewReplacer(".", "_")
+	viper.SetEnvKeyReplacer(replacer)
+
+	// Read the config file
+	if err := viper.ReadInConfig(); err != nil {
+		slog.Error("Error reading config file", "error", err)
+	}
+}
+
+func main() {
+	setupConfig()
+
+	URL := viper.GetString("rmi.redmine.url")
+	KEY := viper.GetString("rmi.redmine.key")
+
+	if URL == "" || KEY == "" {
+		panic("no credentials found in config or environment.")
 	}
 
 	if len(os.Args) == 1 {
@@ -75,33 +91,41 @@ func main() {
 	}
 	commit := string(dat)
 
-	r := regexp.MustCompile(`(?i)issue: *(\d+)`)
-	match := r.FindStringSubmatch(commit)
+	// https://adeboyedn.hashnode.dev/git-hooks-a-simple-guide#heading-post-commit
+	commit_hash := os.Args[3]
+	if commit_hash == "" {
+		fmt.Println("commit hash not found!")
+		os.Exit(0)
+	}
 
-	// Split the input string into lines
-	lines := strings.Split(commit, "\n")
-	var result []string
-	for _, line := range lines {
-		if !r.MatchString(line) {
-			result = append(result, line)
+	linkRegEx := regexp.MustCompile(`    - https://projects.sdzecom.de/issues/\d+`)
+	match := linkRegEx.FindStringSubmatch(commit)
+
+	for _, m := range match {
+		m = strings.TrimSpace(m)
+		parts := strings.Split(m, "/")
+
+		issueID, err := strconv.ParseInt(parts[len(parts)-1], 10, 64)
+		if err != nil {
+			panic(err)
 		}
-	}
 
-	// Join the remaining lines back into a single string
-	output := strings.Join(result, "\n")
-
-	issueID, err := strconv.ParseInt(match[1], 10, 64)
-	if err != nil {
-		panic(err)
-	}
-	comment := `
+		comment := `
 Notiz: Dieser Kommentar wurde automatisch erzeugt, weil an diesem Ticket gearbeitet wurde:
---
+<pre>
 %s
---
+</pre>
+
+Commit-Hash: %s
 `
 
-	if err := rmc.WriteComment(issueID, fmt.Sprintf(comment, output)); err != nil {
-		panic(err)
+		if viper.GetBool("rmi.redmine.dryrun") {
+			litter.Dump(fmt.Sprintf(comment, commit, commit_hash))
+			continue
+		}
+
+		if err := rmc.WriteComment(issueID, fmt.Sprintf(comment, commit, commit_hash)); err != nil {
+			panic(err)
+		}
 	}
 }
