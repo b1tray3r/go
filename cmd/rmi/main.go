@@ -2,12 +2,11 @@ package main
 
 import (
 	"fmt"
-	"log/slog"
-	"net/url"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/b1tray3r/go/internal/redmine"
 	md "github.com/nao1215/markdown"
@@ -18,7 +17,12 @@ import (
 func setupConfig() {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yml")
-	viper.AddConfigPath(".")
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		panic(err)
+	}
+	viper.AddConfigPath(home + "/.config/rmi")
 
 	// Read in environment variables that match
 	viper.AutomaticEnv()
@@ -26,8 +30,11 @@ func setupConfig() {
 	viper.SetEnvKeyReplacer(replacer)
 
 	// Read the config file
-	if err := viper.ReadInConfig(); err != nil {
-		slog.Error("Error reading config file", "error", err)
+	if err := viper.ReadInConfig(); !os.IsNotExist(err) {
+		if err != nil {
+			panic(fmt.Errorf("fatal error config file: %s", err))
+		}
+		return
 	}
 }
 
@@ -68,12 +75,14 @@ func main() {
 		pn := strings.ReplaceAll(i.Project.Name, "-", "_")
 
 		md.NewMarkdown(os.Stdout).
+			HorizontalRule().
+			PlainTextf("sdz-project: %s", pn).
+			PlainTextf("sdz-reporter: %s", i.Author.Name).
+			PlainTextf("sdz-issue: \"%s/issues/%d\"", viper.GetString("rmi.redmine.url"), i.ID).
+			PlainTextf("last-update: %s", time.Now().Format("2006-01-02")).
+			HorizontalRule().
 			H1(i.Subject).
-			HorizontalRule().
-			BlueBadgef("Project-%s", url.QueryEscape(pn)).
-			GreenBadgef("Issue-%d", i.ID).
-			YellowBadgef("Reporter-%s", url.QueryEscape(i.Author.Name)).
-			HorizontalRule().
+			PlainText("\n").
 			PlainText(i.Description).
 			Build()
 
