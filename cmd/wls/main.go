@@ -141,6 +141,7 @@ type Tag struct {
 }
 
 type TimeEntry struct {
+	ID     string
 	Hours  float64
 	Tags   []Tag
 	Note   string
@@ -156,7 +157,7 @@ func (srv *Server) listEntriesforDay(w http.ResponseWriter, r *http.Request) {
 	date := r.URL.Query().Get("date")
 	year := date[:4]
 	month := date[5:7]
-	dataDir := "./data"
+	dataDir := viper.GetString("wls.app.dataDir")
 	filePath := filepath.Join(dataDir, year, month, date+".json")
 	if date == "" {
 		http.Error(w, "Date parameter is required", http.StatusBadRequest)
@@ -480,8 +481,8 @@ func (srv *Server) handleAddLog(w http.ResponseWriter, r *http.Request) {
 			slog.Error("Failed to parse hours", "error", err)
 			return
 		}
-		note := strings.TrimSpace(split[3])
-		ts := split[2]
+		note := strings.TrimSpace(split[4])
+		ts := split[3]
 
 		tags := make([]Tag, 0)
 		for _, t := range strings.Split(ts, " ") {
@@ -497,11 +498,16 @@ func (srv *Server) handleAddLog(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 
+		id := strings.TrimSpace(split[2])
+
 		entries = append(entries, TimeEntry{
+			ID:    id,
 			Hours: hours,
 			Note:  note,
 			Tags:  tags,
 		})
+
+		slog.Info("Entry", "id", id, "hours", hours, "note", note, "tags", tags)
 	}
 
 	// Extract the date from the markdown body
@@ -515,7 +521,7 @@ func (srv *Server) handleAddLog(w http.ResponseWriter, r *http.Request) {
 	// Create the data directory if it doesn't exist
 	year := date[:4]
 	month := date[5:7]
-	dataDir := "./data"
+	dataDir := viper.GetString("wls.app.dataDir")
 	if err := os.MkdirAll(filepath.Join(dataDir, year, month), os.ModePerm); err != nil {
 		http.Error(w, "Failed to create data directory", http.StatusInternalServerError)
 		slog.Error("Failed to create data directory", "error", err)
@@ -541,20 +547,22 @@ func (srv *Server) handleAddLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	updatedEntries := make([]TimeEntry, 0)
 	// Overwrite existing entries with new entries if the existing entry is not yet synced
 	for _, newEntry := range entries {
-		existingSynced := false
-		for i, existingEntry := range existingEntries {
-			if !existingEntry.Synced {
-				existingEntries[i] = newEntry
-				existingSynced = true
-				break
+		ID := newEntry.ID
+
+		for _, existingEntry := range existingEntries {
+			if existingEntry.ID != ID {
+				continue
+			}
+
+			if existingEntry.Synced {
+				continue
 			}
 		}
 
-		if !existingSynced {
-			existingEntries = append(existingEntries, newEntry)
-		}
+		updatedEntries = append(updatedEntries, newEntry)
 	}
 
 	// Truncate the file before writing new entries
@@ -574,7 +582,7 @@ func (srv *Server) handleAddLog(w http.ResponseWriter, r *http.Request) {
 	// Write the entries to the file as JSON
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(existingEntries); err != nil {
+	if err := encoder.Encode(updatedEntries); err != nil {
 		http.Error(w, "Failed to write entries to file", http.StatusInternalServerError)
 		slog.Error("Failed to write entries to file", "error", err)
 		return
@@ -659,8 +667,6 @@ func main() {
 	}
 
 	addr := viper.GetString("wls.server.address")
-
-	slog.Debug(addr)
 
 	slog.Info("Starting server", "address", addr)
 	slog.Debug("With basic auth", "username", viper.GetString("wls.auth.username"), "secret", viper.GetString("wls.auth.password"))
