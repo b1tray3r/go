@@ -107,7 +107,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	linkRegEx := regexp.MustCompile(`    - https://projects.sdzecom.de/issues/\d+`)
+	linkRegEx := regexp.MustCompile(`https://projects.sdzecom.de/issues/\d+`)
 	match := linkRegEx.FindStringSubmatch(commit)
 
 	for _, m := range match {

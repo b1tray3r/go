@@ -214,6 +214,9 @@ func (srv *Server) listEntriesforDay(w http.ResponseWriter, r *http.Request) {
 				.calendar .weekend {
 					background-color: #f0f0f0;
 				}
+				.calendar .selected {
+					background-color: #90ee90; /* Light green */
+				}
 			</style>
 			<div class="calendar">
 				<div class="header">Mon</div>
@@ -243,6 +246,9 @@ func (srv *Server) listEntriesforDay(w http.ResponseWriter, r *http.Request) {
 		if dayDate.Day() == now.Day() {
 			classes += " today"
 		}
+		if dayDate.Format("2006-01-02") == date {
+			classes += " selected"
+		}
 		w.Write([]byte(fmt.Sprintf(`<div class="%s" onclick="window.location.href='?date=%s'">%d</div>`, classes, now.Format("2006-01-")+fmt.Sprintf("%02d", day), day)))
 	}
 
@@ -252,7 +258,11 @@ func (srv *Server) listEntriesforDay(w http.ResponseWriter, r *http.Request) {
 	for i, entry := range entries {
 		tags := make([]string, len(entry.Tags))
 		for j, tag := range entry.Tags {
-			tags[j] = tag.Name + "/" + tag.Value
+			v := tag.Value
+			if tag.Name == "issue" {
+				v = "<a href='https://projects.sdzecom.de/issues/" + v + "' target='_blank'>" + v + "</a>"
+			}
+			tags[j] = tag.Name + "/" + v
 		}
 		syncIcon := "&#10060;" // ❌
 		if entry.Synced {
@@ -319,7 +329,7 @@ func (srv *Server) syncEntry(w http.ResponseWriter, r *http.Request) {
 
 	year := req.Date[:4]
 	month := req.Date[5:7]
-	dataDir := "./data"
+	dataDir := viper.GetString("wls.app.dataDir")
 	filePath := filepath.Join(dataDir, year, month, req.Date+".json")
 
 	file, err := os.Open(filePath)
@@ -344,6 +354,7 @@ func (srv *Server) syncEntry(w http.ResponseWriter, r *http.Request) {
 
 	if req.Index < 0 || req.Index >= len(entries) {
 		http.Error(w, "Invalid entry index", http.StatusBadRequest)
+		slog.Error("Invalid entry index", "index", req.Index)
 		return
 	}
 
@@ -352,6 +363,7 @@ func (srv *Server) syncEntry(w http.ResponseWriter, r *http.Request) {
 	entry := entries[req.Index]
 	if entry.Synced {
 		http.Error(w, "Entry already synced", http.StatusBadRequest)
+		slog.Error("Entry already synced")
 		return
 	}
 
@@ -468,12 +480,13 @@ func (srv *Server) handleAddLog(w http.ResponseWriter, r *http.Request) {
 	matches := re.FindAllString(string(body), -1)
 	entries := make([]TimeEntry, 0)
 	for _, match := range matches {
+		slog.Debug("Working on match", "match", match)
 		if match == "" {
 			continue
 		}
 
 		split := strings.Split(match, "|")
-
+		slog.Debug("Split", "split", split)
 		h := strings.TrimSpace(split[1])
 		hours, err := strconv.ParseFloat(strings.TrimSpace(h), 64)
 		if err != nil {
