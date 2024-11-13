@@ -480,13 +480,11 @@ func (srv *Server) handleAddLog(w http.ResponseWriter, r *http.Request) {
 	matches := re.FindAllString(string(body), -1)
 	entries := make([]TimeEntry, 0)
 	for _, match := range matches {
-		slog.Debug("Working on match", "match", match)
 		if match == "" {
 			continue
 		}
 
 		split := strings.Split(match, "|")
-		slog.Debug("Split", "split", split)
 		h := strings.TrimSpace(split[1])
 		hours, err := strconv.ParseFloat(strings.TrimSpace(h), 64)
 		if err != nil {
@@ -519,8 +517,6 @@ func (srv *Server) handleAddLog(w http.ResponseWriter, r *http.Request) {
 			Note:  note,
 			Tags:  tags,
 		})
-
-		slog.Info("Entry", "id", id, "hours", hours, "note", note, "tags", tags)
 	}
 
 	// Extract the date from the markdown body
@@ -571,7 +567,8 @@ func (srv *Server) handleAddLog(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if existingEntry.Synced {
-				continue
+				newEntry.Synced = true
+				break
 			}
 		}
 
@@ -667,6 +664,10 @@ func setupConfig() {
 func main() {
 	setupConfig()
 	setupLoglevel(viper.GetInt("wls.app.loglevel"))
+
+	if viper.GetBool("wls.redmine.dryrun") {
+		slog.Warn("=== REDMINE: Dry run mode is enabled")
+	}
 
 	srv, err := NewServer(
 		&BasicAuth{

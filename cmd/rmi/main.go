@@ -76,10 +76,10 @@ func main() {
 
 		md.NewMarkdown(os.Stdout).
 			HorizontalRule().
-			PlainTextf("sdz-project: %s", pn).
-			PlainTextf("sdz-reporter: %s", i.Author.Name).
-			PlainTextf("sdz-issue: \"%s/issues/%d\"", viper.GetString("rmi.redmine.url"), i.ID).
-			PlainTextf("last-update: %s", time.Now().Format("2006-01-02")).
+			PlainTextf("redmine-project: %s", pn).
+			PlainTextf("redmine-reporter: %s", i.Author.Name).
+			PlainTextf("redmine-issue: \"%s/issues/%d\"", viper.GetString("rmi.redmine.url"), i.ID).
+			PlainTextf("redmine-last-update: %s", time.Now().Format("2006-01-02")).
 			HorizontalRule().
 			H1(i.Subject).
 			PlainText("\n").
@@ -92,7 +92,7 @@ func main() {
 	commit_msg_file := os.Args[2]
 	if _, err := os.Stat(commit_msg_file); err != nil && os.IsNotExist(err) {
 		fmt.Println("commit message file not found!")
-		os.Exit(0)
+		os.Exit(1)
 	}
 	dat, err := os.ReadFile(commit_msg_file)
 	if err != nil {
@@ -101,10 +101,14 @@ func main() {
 	commit := string(dat)
 
 	// https://adeboyedn.hashnode.dev/git-hooks-a-simple-guide#heading-post-commit
+	if len(os.Args) < 4 {
+		fmt.Println("commit hash not found!")
+		os.Exit(1)
+	}
 	commit_hash := os.Args[3]
 	if commit_hash == "" {
 		fmt.Println("commit hash not found!")
-		os.Exit(0)
+		os.Exit(1)
 	}
 
 	linkRegEx := regexp.MustCompile(`https://projects.sdzecom.de/issues/\d+`)
@@ -117,6 +121,7 @@ func main() {
 		issueID, err := strconv.ParseInt(parts[len(parts)-1], 10, 64)
 		if err != nil {
 			panic(err)
+			os.Exit(1)
 		}
 
 		comment := `
@@ -134,7 +139,8 @@ Commit-Hash: %s
 		}
 
 		if err := rmc.WriteComment(issueID, fmt.Sprintf(comment, commit, commit_hash)); err != nil {
-			panic(err)
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
 		}
 	}
 }
